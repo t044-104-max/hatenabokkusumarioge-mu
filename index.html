@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>8-Bit Math Game</title>
+  <!-- Google Retro Pixel Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: 'Press Start 2P', 'DotGothic16', monospace;
+      overflow: hidden;
+    }
+
+    #game-container {
+      width: 100%;
+      max-width: 800px;
+      height: 100%;
+      max-height: 600px;
+      background-color: #5c94fc; /* Mario Sky Blue */
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 0 30px rgba(0,0,0,0.9);
+      border: 4px solid #000;
+    }
+
+    .scenery {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .cloud {
+      position: absolute;
+      background: #fff;
+      width: 60px;
+      height: 20px;
+      border-radius: 10px;
+      box-shadow: inset -2px -2px 0 rgba(0,0,0,0.15);
+    }
+    .cloud::before, .cloud::after {
+      content: '';
+      position: absolute;
+      background: #fff;
+      border-radius: 50%;
+    }
+    .cloud::before { width: 30px; height: 30px; top: -15px; left: 10px; }
+    .cloud::after { width: 24px; height: 24px; top: -10px; right: 10px; }
+    .c1 { top: 12%; left: 8%; transform: scale(1.4); }
+    .c2 { top: 22%; right: 12%; transform: scale(1.1); }
+    .c3 { top: 8%; right: 42%; }
+
+    .mountain {
+      position: absolute;
+      bottom: 25%;
+      width: 0;
+      height: 0;
+      border-left: 80px solid transparent;
+      border-right: 80px solid transparent;
+      border-bottom: 120px solid #00a800;
+    }
+    .mountain::after {
+      content: '';
+      position: absolute;
+      top: 40px;
+      left: -40px;
+      width: 0;
+      height: 0;
+      border-left: 40px solid transparent;
+      border-right: 40px solid transparent;
+      border-bottom: 60px solid #007800;
+    }
+    .m1 { left: 4%; }
+    .m2 { right: 18%; transform: scale(0.85); }
+
+    .ground {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 25%;
+      background-color: #c84c0c;
+      background-image: 
+        linear-gradient(90deg, rgba(0,0,0,0.4) 2px, transparent 2px),
+        linear-gradient(rgba(0,0,0,0.4) 2px, transparent 2px);
+      background-size: 32px 16px;
+      border-top: 4px solid #000;
+      z-index: 2;
+    }
+
+    .mario-character {
+      position: absolute;
+      bottom: 25%;
+      left: 12%;
+      width: 55px;
+      height: 75px;
+      z-index: 15;
+      transform-origin: bottom center;
+    }
+
+    .mario-jump {
+      animation: jump 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes jump {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(-85px); }
+      100% { transform: translateY(0); }
+    }
+
+    .mario-damage {
+      animation: marioDie 1s forwards;
+      animation-delay: 0.2s;
+    }
+
+    @keyframes marioDie {
+      0% { transform: translateY(0) rotate(0deg); filter: sepia(1) hue-rotate(-50deg) saturate(5); }
+      25% { transform: translateY(-50px) rotate(-15deg); filter: sepia(1) hue-rotate(-50deg) saturate(5); }
+      100% { transform: translateY(300px) rotate(45deg); filter: sepia(1) hue-rotate(-50deg) saturate(5); opacity: 0; }
+    }
+
+    .goomba-character {
+      position: absolute;
+      bottom: 25%;
+      left: 100%;
+      width: 48px;
+      height: 48px;
+      z-index: 16;
+      opacity: 0;
+    }
+
+    .goomba-attack {
+      animation: goombaRush 1.4s linear forwards;
+    }
+
+    @keyframes goombaRush {
+      0% { left: 100%; opacity: 1; }
+      18% { left: 12%; opacity: 1; }
+      50% { left: -20%; opacity: 1; }
+      100% { left: -20%; opacity: 0; }
+    }
+
+    #hud {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      right: 15px;
+      display: flex;
+      justify-content: space-between;
+      color: white;
+      text-shadow: 2px 2px 0 #000;
+      z-index: 10;
+      font-size: 0.95rem;
+    }
+    
+    .hud-item { flex: 1; }
+    .hud-label { margin-bottom: 6px; color: #f8d820; font-size: 0.75rem; }
+
+    #mark-overlay {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 8rem;
+      z-index: 100;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    
+    .mark-show {
+      opacity: 1 !important;
+      animation: pop-mark 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    @keyframes pop-mark {
+      0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0; }
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+
+    #play-area {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-grow: 1;
+      padding-bottom: 12%;
+      gap: 12px;
+      font-size: 2.2rem;
+      color: white;
+      text-shadow: 3px 3px 0 #000;
+    }
+
+    .brick-block {
+      background-color: #c84c0c;
+      border: 4px solid #000;
+      box-shadow: inset 4px 4px 0 #fca044, inset -4px -4px 0 #882c00;
+      width: 68px;
+      height: 68px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .question-block {
+      background-color: #f8d820;
+      border: 4px solid #000;
+      box-shadow: inset 4px 4px 0 #f8f8f8, inset -4px -4px 0 #e8a200;
+      width: 68px;
+      height: 68px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #000;
+      text-shadow: none;
+      animation: blink 0.8s infinite alternate;
+      cursor: pointer;
+    }
+
+    @keyframes blink {
+      0% { background-color: #f8d820; }
+      100% { background-color: #e8a200; }
+    }
+
+    .question-block.active {
+      animation: none;
+      background-color: #f8d820;
+      transform: translateY(-4px);
+    }
+
+    #keypad-container {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 25%;
+      z-index: 20;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0, 0, 0, 0.75);
+      border-top: 4px solid #f8d820;
+    }
+
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      padding: 8px;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    .key-btn {
+      background-color: #b53120;
+      border: 3px solid #000;
+      box-shadow: inset 3px 3px 0 #ff8a7a, inset -3px -3px 0 #6e1c10;
+      color: white;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 1.1rem;
+      padding: 12px 0;
+      cursor: pointer;
+      text-align: center;
+      border-radius: 4px;
+    }
+    
+    .key-btn:active {
+      box-shadow: inset 2px 2px 0 #6e1c10;
+      transform: translateY(2px);
+    }
+    
+    .key-btn.action { 
+      background-color: #4a752c; 
+      box-shadow: inset 3px 3px 0 #85d654, inset -3px -3px 0 #2a4716; 
+    }
+
+    #message {
+      position: absolute;
+      top: 28%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'DotGothic16', sans-serif;
+      font-size: 2rem;
+      font-weight: bold;
+      color: white;
+      text-shadow: 2px 2px 0 #000;
+      z-index: 30;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    #clear-overlay {
+      position: absolute;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.85);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    #clear-overlay.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .clear-title {
+      font-size: 2.2rem;
+      color: #f8d820;
+      text-shadow: 4px 4px 0 #c84c0c;
+      margin-bottom: 25px;
+      animation: pulse 1s infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.08); }
+    }
+
+    .stats-box {
+      background: #222;
+      border: 4px solid #fff;
+      padding: 20px 30px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      box-shadow: 6px 6px 0 #000;
+      line-height: 2;
+      font-size: 1rem;
+    }
+
+    .btn-restart {
+      background-color: #f8d820;
+      color: #000;
+      border: 4px solid #000;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 1.1rem;
+      padding: 16px 28px;
+      cursor: pointer;
+      box-shadow: 4px 4px 0 #fff;
+      transition: all 0.1s;
+    }
+
+    .btn-restart:hover {
+      background-color: #fff;
+      box-shadow: 4px 4px 0 #f8d820;
+      transform: scale(1.05);
+    }
+
+    .bounce { animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes pop {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.25); }
+      100% { transform: scale(1); }
+    }
+    
+    .shake { animation: shake 0.4s ease-in-out; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+
+    @media (max-width: 640px) {
+      #play-area { font-size: 1.6rem; gap: 6px; }
+      .brick-block, .question-block { width: 50px; height: 50px; }
+      .key-btn { font-size: 0.9rem; padding: 10px 0; }
+      #hud { font-size: 0.75rem; }
+      .hud-label { font-size: 0.6rem; }
+      .clear-title { font-size: 1.5rem; }
+      .stats-box { font-size: 0.85rem; padding: 15px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="game-container">
+    <!-- Scenery -->
+    <div class="scenery">
+      <div class="cloud c1"></div>
+      <div class="cloud c2"></div>
+      <div class="cloud c3"></div>
+      <div class="mountain m1"></div>
+      <div class="mountain m2"></div>
+    </div>
+
+    <!-- HUD Top Bar -->
+    <div id="hud">
+      <div class="hud-item">
+        <div class="hud-label">SCORE</div>
+        <div id="score-val">000000</div>
+      </div>
+      <div class="hud-item" style="text-align: center;">
+        <div class="hud-label">TIME</div>
+        <div id="time-val">000</div>
+      </div>
+      <div class="hud-item" style="text-align: center;">
+        <div class="hud-label">LEVEL</div>
+        <div id="level-val">1</div>
+      </div>
+      <div class="hud-item" style="text-align: right;">
+        <div class="hud-label">GOAL</div>
+        <div id="progress-val">0/15</div>
+      </div>
+    </div>
+
+    <!-- Feedback Popups -->
+    <div id="message"></div>
+    <div id="mark-overlay"></div>
+
+    <!-- Quiz Play Area -->
+    <div id="play-area">
+      <div id="box1" class="brick-block"></div>
+      <div id="operator">+</div>
+      <div id="box2" class="question-block">?</div>
+      <div>=</div>
+      <div id="box3" class="brick-block"></div>
+    </div>
+
+    <!-- Ground -->
+    <div class="ground"></div>
+
+    <!-- Mario SVG Pixel Art -->
+    <div class="mario-character" id="mario">
+      <svg viewBox="0 0 12 16" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <g shape-rendering="crispEdges">
+          <rect x="4" y="0" width="5" height="1" fill="#d82800"/>
+          <rect x="3" y="1" width="9" height="1" fill="#d82800"/>
+          <rect x="3" y="2" width="3" height="1" fill="#887000"/><rect x="6" y="2" width="2" height="1" fill="#f8d870"/><rect x="8" y="2" width="1" height="1" fill="#887000"/>
+          <rect x="2" y="3" width="1" height="1" fill="#887000"/><rect x="3" y="3" width="1" height="1" fill="#f8d870"/><rect x="4" y="3" width="1" height="1" fill="#887000"/><rect x="5" y="3" width="3" height="1" fill="#f8d870"/><rect x="8" y="3" width="1" height="1" fill="#887000"/><rect x="9" y="3" width="3" height="1" fill="#f8d870"/>
+          <rect x="2" y="4" width="1" height="1" fill="#887000"/><rect x="3" y="4" width="1" height="1" fill="#f8d870"/><rect x="4" y="4" width="1" height="1" fill="#887000"/><rect x="5" y="4" width="3" height="1" fill="#f8d870"/><rect x="8" y="4" width="1" height="1" fill="#887000"/><rect x="9" y="4" width="3" height="1" fill="#f8d870"/>
+          <rect x="2" y="5" width="2" height="1" fill="#887000"/><rect x="4" y="5" width="4" height="1" fill="#f8d870"/><rect x="8" y="5" width="3" height="1" fill="#887000"/>
+          <rect x="3" y="6" width="7" height="1" fill="#f8d870"/>
+          <rect x="2" y="7" width="2" height="1" fill="#d82800"/><rect x="4" y="7" width="1" height="1" fill="#0070c8"/><rect x="5" y="7" width="2" height="1" fill="#d82800"/>
+          <rect x="1" y="8" width="3" height="1" fill="#d82800"/><rect x="4" y="8" width="2" height="1" fill="#0070c8"/><rect x="6" y="8" width="3" height="1" fill="#d82800"/>
+          <rect x="0" y="9" width="4" height="1" fill="#d82800"/><rect x="4" y="9" width="4" height="1" fill="#0070c8"/><rect x="8" y="9" width="4" height="1" fill="#d82800"/>
+          <rect x="0" y="10" width="2" height="1" fill="#f8d870"/><rect x="3" y="10" width="2" height="1" fill="#0070c8"/><rect x="5" y="10" width="1" height="1" fill="#f8d820"/><rect x="6" y="10" width="2" height="1" fill="#0070c8"/><rect x="9" y="10" width="2" height="1" fill="#f8d870"/>
+          <rect x="0" y="11" width="3" height="1" fill="#f8d870"/><rect x="3" y="11" width="6" height="1" fill="#0070c8"/><rect x="9" y="11" width="3" height="1" fill="#f8d870"/>
+          <rect x="0" y="12" width="2" height="1" fill="#f8d870"/><rect x="3" y="12" width="6" height="1" fill="#0070c8"/><rect x="10" y="12" width="2" height="1" fill="#f8d870"/>
+          <rect x="3" y="13" width="2" height="1" fill="#0070c8"/><rect x="7" y="13" width="2" height="1" fill="#0070c8"/>
+          <rect x="2" y="14" width="3" height="1" fill="#887000"/><rect x="7" y="14" width="3" height="1" fill="#887000"/>
+          <rect x="0" y="15" width="4" height="1" fill="#887000"/><rect x="8" y="15" width="4" height="1" fill="#887000"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Goomba SVG Pixel Art -->
+    <div class="goomba-character" id="goomba">
+      <svg viewBox="0 0 16 16" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <g shape-rendering="crispEdges">
+          <rect x="5" y="4" width="6" height="1" fill="#c84c0c"/>
+          <rect x="3" y="5" width="10" height="1" fill="#c84c0c"/>
+          <rect x="2" y="6" width="12" height="1" fill="#c84c0c"/>
+          <rect x="1" y="7" width="14" height="4" fill="#c84c0c"/>
+          
+          <rect x="4" y="6" width="2" height="1" fill="#000"/>
+          <rect x="3" y="7" width="2" height="2" fill="#fff"/>
+          <rect x="4" y="7" width="1" height="2" fill="#000"/>
+          
+          <rect x="10" y="6" width="2" height="1" fill="#000"/>
+          <rect x="11" y="7" width="2" height="2" fill="#fff"/>
+          <rect x="11" y="7" width="1" height="2" fill="#000"/>
+          
+          <rect x="6" y="11" width="4" height="1" fill="#f8d870"/>
+          <rect x="5" y="12" width="6" height="1" fill="#f8d870"/>
+          <rect x="6" y="13" width="4" height="1" fill="#f8d870"/>
+          
+          <rect x="2" y="13" width="3" height="1" fill="#000"/>
+          <rect x="1" y="14" width="4" height="2" fill="#000"/>
+          <rect x="11" y="13" width="3" height="1" fill="#000"/>
+          <rect x="11" y="14" width="4" height="2" fill="#000"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- On-screen Keypad -->
+    <div id="keypad-container">
+      <div class="keypad">
+        <button class="key-btn" onclick="inputNum('1')">1</button>
+        <button class="key-btn" onclick="inputNum('2')">2</button>
+        <button class="key-btn" onclick="inputNum('3')">3</button>
+        <button class="key-btn" onclick="inputNum('4')">4</button>
+        <button class="key-btn" onclick="inputNum('5')">5</button>
+        <button class="key-btn action" onclick="deleteNum()">⌫</button>
+        <button class="key-btn action" onclick="clearInput()">C</button>
+        
+        <button class="key-btn" onclick="inputNum('6')">6</button>
+        <button class="key-btn" onclick="inputNum('7')">7</button>
+        <button class="key-btn" onclick="inputNum('8')">8</button>
+        <button class="key-btn" onclick="inputNum('9')">9</button>
+        <button class="key-btn" onclick="inputNum('0')">0</button>
+        <button class="key-btn action" style="grid-column: span 2;" onclick="checkAnswer()">OK</button>
+      </div>
+    </div>
+
+    <!-- Game Clear Modal Overlay -->
+    <div id="clear-overlay">
+      <h1 class="clear-title">COURSE CLEAR!</h1>
+      <div class="stats-box">
+        <p>FINAL SCORE: <span id="final-score" style="color: #f8d820;">000000</span></p>
+        <p>CLEAR TIME: <span id="final-time" style="color: #f8d820;">000</span>s</p>
+        <p>QUESTIONS: <span style="color: #f8d820;">15 / 15</span></p>
+      </div>
+      <button class="btn-restart" onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <script>
+    // State Variables
+    let score = 0;
+    let level = 1;
+    let correctCount = 0;
+    const GOAL_COUNT = 15;
+    let correctAnswer = 0;
+    let currentInput = '';
+    let qBoxElement = null;
+    let isGameOver = false;
+
+    let timeElapsed = 0;
+    let timerInterval = null;
+
+    // Elements
+    const elScore = document.getElementById('score-val');
+    const elLevel = document.getElementById('level-val');
+    const elTime = document.getElementById('time-val');
+    const elProgress = document.getElementById('progress-val');
+    const elMessage = document.getElementById('message');
+    const elMarkOverlay = document.getElementById('mark-overlay');
+    const elMario = document.getElementById('mario');
+    const elGoomba = document.getElementById('goomba');
+    const elClearOverlay = document.getElementById('clear-overlay');
+    const elFinalScore = document.getElementById('final-score');
+    const elFinalTime = document.getElementById('final-time');
+
+    // Audio Context Setup
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playTone(freq, type, duration, vol = 0.15) {
+      initAudio();
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.start();
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    // 8-Bit Coin Sound (Correct)
+    function playCoinSound() {
+      initAudio();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      
+      osc.type = 'square';
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.frequency.setValueAtTime(987.77, now); // B5
+      osc.frequency.setValueAtTime(1318.51, now + 0.08); // E6
+      
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      
+      osc.start(now);
+      osc.stop(now + 0.35);
+    }
+
+    // 8-Bit Buzzer Sound (Wrong)
+    function playBuzzerSound() {
+      initAudio();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      
+      osc.type = 'sawtooth';
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.linearRampToValueAtTime(90, now + 0.25);
+      
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      
+      osc.start(now);
+      osc.stop(now + 0.3);
+    }
+
+    // 8-Bit Victory Fanfare (Course Clear)
+    function playClearFanfare() {
+      initAudio();
+      const notes = [
+        {f: 392.00, d: 0.12}, // G4
+        {f: 523.25, d: 0.12}, // C5
+        {f: 659.25, d: 0.12}, // E5
+        {f: 783.99, d: 0.20}, // G5
+        {f: 659.25, d: 0.12}, // E5
+        {f: 783.99, d: 0.45}  // G5
+      ];
+      let delay = 0;
+      notes.forEach(note => {
+        setTimeout(() => {
+          playTone(note.f, 'square', note.d, 0.2);
+        }, delay * 1000);
+        delay += note.d;
+      });
+    }
+
+    function startTimer() {
+      stopTimer();
+      timerInterval = setInterval(() => {
+        if (!isGameOver) {
+          timeElapsed++;
+          elTime.textContent = timeElapsed.toString().padStart(3, '0');
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    function updateHUD() {
+      elScore.textContent = score.toString().padStart(6, '0');
+      elLevel.textContent = level;
+      elProgress.textContent = `${correctCount}/${GOAL_COUNT}`;
+    }
+
+    function generateQuestion() {
+      currentInput = '';
+      if (qBoxElement) qBoxElement.classList.remove('active');
+      
+      // Changed to include all four arithmetic operations from the beginning
+      let ops = ['+', '-', '*', '/'];
+      
+      let op = ops[Math.floor(Math.random() * ops.length)];
+      let A, B, C;
+      let missing = Math.random() > 0.5 ? 1 : 2;
+      
+      if (op === '+') {
+        let max = level === 1 ? 9 : 20;
+        A = Math.floor(Math.random() * max) + 1;
+        B = Math.floor(Math.random() * max) + 1;
+        C = A + B;
+      } else if (op === '-') {
+        let max = level <= 2 ? 15 : 30;
+        B = Math.floor(Math.random() * max) + 1;
+        C = Math.floor(Math.random() * max) + 1;
+        A = B + C; 
+      } else if (op === '*') {
+        let maxMulti = level >= 4 ? 12 : 9;
+        A = Math.floor(Math.random() * (maxMulti - 1)) + 2;
+        B = Math.floor(Math.random() * 8) + 2;
+        C = A * B;
+      } else if (op === '/') {
+        let maxMulti = level >= 5 ? 12 : 9;
+        B = Math.floor(Math.random() * (maxMulti - 1)) + 2; 
+        C = Math.floor(Math.random() * 8) + 2; 
+        A = B * C;
+      }
+      
+      correctAnswer = missing === 1 ? A : B;
+      
+      let opSign = op;
+      if (op === '*') opSign = '×';
+      if (op === '/') opSign = '÷';
+      
+      const box1 = document.getElementById('box1');
+      const box2 = document.getElementById('box2');
+      const box3 = document.getElementById('box3');
+      const elOp = document.getElementById('operator');
+      
+      elOp.textContent = opSign;
+      box3.textContent = C;
+      
+      if (missing === 1) {
+        box1.className = 'question-block';
+        box1.textContent = '?';
+        box2.className = 'brick-block';
+        box2.textContent = B;
+        qBoxElement = box1;
+      } else {
+        box1.className = 'brick-block';
+        box1.textContent = A;
+        box2.className = 'question-block';
+        box2.textContent = '?';
+        qBoxElement = box2;
+      }
+    }
+
+    function showMessage(text, isCorrect) {
+      elMessage.textContent = text;
+      elMessage.style.color = isCorrect ? '#f8d820' : '#ff4040';
+      elMessage.style.opacity = 1;
+      
+      setTimeout(() => {
+        elMessage.style.opacity = 0;
+      }, 1400);
+    }
+
+    function showMark(mark) {
+      elMarkOverlay.textContent = mark;
+      elMarkOverlay.classList.remove('mark-show');
+      void elMarkOverlay.offsetWidth;
+      elMarkOverlay.classList.add('mark-show');
+      
+      setTimeout(() => {
+        elMarkOverlay.classList.remove('mark-show');
+      }, 900);
+    }
+
+    function inputNum(numStr) {
+      if (isGameOver) return;
+      initAudio();
+      if (currentInput.length < 3) {
+        currentInput += numStr;
+        if (qBoxElement) {
+          qBoxElement.textContent = currentInput;
+          qBoxElement.classList.add('active');
+        }
+      }
+    }
+
+    function deleteNum() {
+      if (isGameOver) return;
+      initAudio();
+      if (currentInput.length > 0) {
+        currentInput = currentInput.slice(0, -1);
+        if (qBoxElement) {
+          qBoxElement.textContent = currentInput === '' ? '?' : currentInput;
+          if (currentInput === '') qBoxElement.classList.remove('active');
+        }
+      }
+    }
+
+    function clearInput() {
+      if (isGameOver) return;
+      currentInput = '';
+      if (qBoxElement) {
+        qBoxElement.textContent = '?';
+        qBoxElement.classList.remove('active');
+      }
+    }
+
+    function checkAnswer() {
+      if (isGameOver || currentInput === '') return;
+      
+      const userAnswer = parseInt(currentInput, 10);
+      
+      if (userAnswer === correctAnswer) {
+        // Correct Answer
+        playCoinSound();
+        correctCount++;
+        score += 100 * level;
+        
+        // Mario Jump Animation
+        elMario.classList.remove('mario-jump');
+        void elMario.offsetWidth;
+        elMario.classList.add('mario-jump');
+        
+        // Check Goal Condition (15 Correct Questions)
+        if (correctCount >= GOAL_COUNT) {
+          handleCourseClear();
+          return;
+        }
+
+        // Level Up every 3 questions
+        if (correctCount % 3 === 0 && level < 5) {
+          level++;
+          showMessage('LEVEL UP!', true);
+        } else {
+          showMessage('CORRECT!', true);
+        }
+        
+        updateHUD();
+        
+        if (qBoxElement) qBoxElement.classList.add('bounce');
+        showMark('⭕️');
+        
+        setTimeout(() => {
+          if (qBoxElement) qBoxElement.classList.remove('bounce');
+          generateQuestion();
+        }, 1100);
+        
+      } else {
+        // Incorrect Answer
+        playBuzzerSound();
+        if (qBoxElement) qBoxElement.classList.add('shake');
+        showMessage('TRY AGAIN!', false);
+        showMark('❌');
+        
+        // Goomba Attack Animation
+        elGoomba.classList.remove('goomba-attack');
+        elMario.classList.remove('mario-damage');
+        void elGoomba.offsetWidth;
+        void elMario.offsetWidth;
+        
+        elGoomba.classList.add('goomba-attack');
+        elMario.classList.add('mario-damage');
+        
+        setTimeout(() => {
+          if (qBoxElement) qBoxElement.classList.remove('shake');
+          elMario.classList.remove('mario-damage');
+          elGoomba.classList.remove('goomba-attack');
+          clearInput();
+        }, 1400);
+      }
+    }
+
+    function handleCourseClear() {
+      isGameOver = true;
+      stopTimer();
+      updateHUD();
+      showMark('⭕️');
+      
+      elFinalScore.textContent = score.toString().padStart(6, '0');
+      elFinalTime.textContent = timeElapsed.toString().padStart(3, '0');
+      
+      playClearFanfare();
+
+      setTimeout(() => {
+        elClearOverlay.classList.add('show');
+      }, 800);
+    }
+
+    function resetGame() {
+      score = 0;
+      level = 1;
+      correctCount = 0;
+      timeElapsed = 0;
+      isGameOver = false;
+      
+      elClearOverlay.classList.remove('show');
+      
+      updateHUD();
+      generateQuestion();
+      startTimer();
+    }
+
+    // Keyboard event listeners
+    window.addEventListener('keydown', (e) => {
+      if (e.key >= '0' && e.key <= '9') {
+        inputNum(e.key);
+      } else if (e.key === 'Enter') {
+        checkAnswer();
+      } else if (e.key === 'Backspace') {
+        deleteNum();
+      } else if (e.key === 'Escape' || e.key.toLowerCase() === 'c') {
+        clearInput();
+      }
+    });
+
+    // Initialize Game
+    updateHUD();
+    generateQuestion();
+    startTimer();
+  </script>
+</body>
+</html>
